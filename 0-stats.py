@@ -1,45 +1,42 @@
 #!/usr/bin/python3
-
-"""
-Script qui lit des logs depuis l'entrée standard (stdin)
-et affiche des statistiques :
-- Taille totale des fichiers
-- Nombre de lignes par code HTTP valide
-Les statistiques sont affichées toutes les 10 lignes ou
-lors d'une interruption clavier (CTRL+C).
-"""
+"""Log parsing script."""
 
 import sys
+import re
+from collections import defaultdict
 
-if __name__ == '__main__':
+status_codes = {'200', '301', '400', '401', '403', '404', '405', '500'}
+stats = defaultdict(int)
+total_size = 0
+line_count = 0
 
-    filesize, count = 0, 0
-    codes = ["200", "301", "400", "401", "403", "404", "405", "500"]
-    stats = {k: 0 for k in codes}
 
-    def print_stats(stats: dict, file_size: int) -> None:
-        print("File size: {:d}".format(filesize))
-        for k, v in sorted(stats.items()):
-            if v:
-                print("{}: {}".format(k, v))
+def print_stats():
+    """Print the accumulated statistics."""
+    print("File size: {}".format(total_size))
+    for code in sorted(status_codes):
+        if stats[code]:
+            print("{}: {}".format(code, stats[code]))
 
-    try:
-        for line in sys.stdin:
-            count += 1
-            data = line.split()
-            try:
-                status_code = data[-2]
-                if status_code in stats:
-                    stats[status_code] += 1
-            except BaseException:
-                pass
-            try:
-                filesize += int(data[-1])
-            except BaseException:
-                pass
-            if count % 10 == 0:
-                print_stats(stats, filesize)
-        print_stats(stats, filesize)
-    except KeyboardInterrupt:
-        print_stats(stats, filesize)
-        raise
+
+pattern = re.compile(
+    r'^\d{1,3}(?:\.\d{1,3}){3} - \[.*?\] '
+    r'"GET /projects/260 HTTP/1.1" (\d{3}) (\d+)$'
+)
+
+try:
+    for line in sys.stdin:
+        match = pattern.match(line.strip())
+        if match:
+            code, size = match.groups()
+            if code in status_codes:
+                stats[code] += 1
+            total_size += int(size)
+            line_count += 1
+            if line_count % 10 == 0:
+                print_stats()
+except KeyboardInterrupt:
+    print_stats()
+    raise
+
+print_stats()
